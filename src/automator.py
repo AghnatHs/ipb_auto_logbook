@@ -74,6 +74,90 @@ class LogbookConfig:
         return cls(password="", **data)
 
 
+# ------------------------------------------------------------------
+# Pre-flight file checker
+# ------------------------------------------------------------------
+
+
+def preflight_check(csv_path: str) -> dict:
+    """Validate CSV and all referenced files before starting automation.
+
+    Args:
+        csv_path: Path to the CSV file (relative to project root or absolute).
+
+    Returns:
+        dict with keys:
+            ok            — True if all checks pass
+            issues        — list of human-readable error/warning strings
+            total_entries — number of rows in the CSV
+            missing_files — list of file paths that were not found
+    """
+    issues: list[str] = []
+    missing_files: list[str] = []
+    total_entries = 0
+
+    abs_csv = Path(resolve_to_absolute_path(csv_path))
+
+    # 1. CSV file exists
+    if not abs_csv.exists():
+        return {
+            "ok": False,
+            "issues": [f"CSV file not found: {abs_csv}"],
+            "total_entries": 0,
+            "missing_files": [],
+        }
+
+    # 2. CSV is readable and has the right columns
+    try:
+        df = pd.read_csv(abs_csv)
+    except Exception as e:
+        return {
+            "ok": False,
+            "issues": [f"Failed to read CSV ({abs_csv}): {e}"],
+            "total_entries": 0,
+            "missing_files": [],
+        }
+
+    expected_cols = {
+        "tanggal",
+        "mulai",
+        "selesai",
+        "keterangan",
+        "file",
+        "tipe",
+        "lokasi",
+        "berita",
+    }
+    actual_cols = set(col.lower() for col in df.columns)
+    missing_cols = expected_cols - actual_cols
+    if missing_cols:
+        issues.append(f"CSV missing columns: {', '.join(sorted(missing_cols))}")
+
+    total_entries = df.shape[0]
+    if total_entries == 0:
+        issues.append("CSV has no data rows")
+
+    # 3. Check each row's file path
+    if "file" in df.columns:
+        for i in range(total_entries):
+            rel_path = str(df["file"][i]).strip()
+            if not rel_path:
+                issues.append(f"Row {i + 2}: 'file' column is empty")
+                continue
+            abs_file = Path(resolve_to_absolute_path(rel_path))
+            if not abs_file.exists():
+                issues.append(f"Row {i + 2}: File not found → {rel_path}")
+                missing_files.append(rel_path)
+
+    ok = len(issues) == 0
+    return {
+        "ok": ok,
+        "issues": issues,
+        "total_entries": total_entries,
+        "missing_files": missing_files,
+    }
+
+
 class LogbookAutomator:
     """Orchestrates Playwright-based logbook automation.
 

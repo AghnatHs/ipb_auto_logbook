@@ -6,7 +6,7 @@ import threading
 
 import customtkinter as ctk
 
-from src.automator import LogbookAutomator
+from src.automator import LogbookAutomator, preflight_check
 
 
 class RunTabMixin:
@@ -62,9 +62,22 @@ class RunTabMixin:
 
         cfg = self._gather_config()
         if not cfg.username or not cfg.password:
+            self._clear_log()
             self._log("⚠ Username and password are required.")
             return
 
+        self._clear_log()
+        self._log("Running file checker...")
+        result = preflight_check(cfg.csv_path)
+        if not result["ok"]:
+            self._log(f"File check found {len(result['issues'])} issue(s):")
+            for issue in result["issues"]:
+                self._log(f"  • {issue}")
+            self._log("Fix the issues above and try again.")
+            return
+
+        self._log(f"✅ All {result['total_entries']} entries and files verified.")
+        self._log(f"Starting automation with {cfg.csv_path}...")
         self._automator = LogbookAutomator(
             config=cfg,
             progress_callback=self._on_progress,
@@ -74,8 +87,6 @@ class RunTabMixin:
         self._set_running(True)
         self._lbl_status.configure(text="Running...", text_color="#f9a825")
         self._progress.set(0)
-        self._clear_log()
-        self._log(f"Starting automation with {cfg.csv_path}...")
 
         self._tabview.configure(state="disabled")
 
