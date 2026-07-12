@@ -1,5 +1,6 @@
 """Core logbook automation logic for IPB Student Portal."""
 
+from site import abs_paths
 import threading
 import time
 from dataclasses import dataclass
@@ -146,8 +147,8 @@ def preflight_check(csv_path: str) -> dict:
                 continue
             abs_file = Path(resolve_to_absolute_path(rel_path))
             if not abs_file.exists():
-                issues.append(f"Row {i + 2}: File not found → {rel_path}")
-                missing_files.append(rel_path)
+                issues.append(f"Row {i + 2}: File not found → {str(abs_file)}")
+                missing_files.append(str(abs_file))
 
     ok = len(issues) == 0
     return {
